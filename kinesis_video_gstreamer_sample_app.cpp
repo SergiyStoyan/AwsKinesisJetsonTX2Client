@@ -422,12 +422,10 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 		}
 
 	g_print(">>>55555555\n");
-	/* source filter */
 	GstCaps *source_caps; 
 	// nv omxh264enc only support I420 or NV12 as input formats see doc	
-	//source_caps = gst_caps_from_string("video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)I420");
 	gchar *s = g_strdup_printf("%s, width=(int)%i, height=(int)%i, format=(string)%s, framerate=(fraction)%i/1", SOURCE_FILTER, width, height, SOURCE_FORMAT, framerate);
-	LOG_INFO(">>Filter: " << s);// LOG4CPLUS_TEXT("This is a char: ")		<< LOG4CPLUS_TEXT('x')
+	LOG_INFO(">>Filter: " << s);
 	source_caps = gst_caps_from_string(s);
 	g_free(s);
 	g_print(">>>6666666666\n");
@@ -437,6 +435,7 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 
 			g_print(">>>23232322323232\n");
 			//g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "target-bitrate", bitrateInKBPS * 10000, "periodicity-idr", 45, "inline-header", FALSE, NULL);
+			g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", 10, "bitrate", bitrateInKBPS, NULL);
 
 	//GstCaps *h264_caps = gst_caps_new_simple("video/x-h264",
 	//	"stream-format", G_TYPE_STRING, "avc",
@@ -501,7 +500,7 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 */
 
 int main(int argc, char* argv[]) {
-	g_print(">>>V:180615-1!\n");
+	g_print(">>>V:180615-2!\n");
 	//LOG_CONFIGURE_STDOUT(20000);
 
 	if (argc < 2) {
