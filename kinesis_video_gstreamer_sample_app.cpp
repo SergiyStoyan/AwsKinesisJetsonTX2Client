@@ -153,7 +153,6 @@ typedef struct _CustomData {
 	unique_ptr<KinesisVideoProducer> kinesis_video_producer;
 	shared_ptr<KinesisVideoStream> kinesis_video_stream;
 	bool stream_started;
-	bool h264_stream_supported;
 } CustomData;
 
 void create_kinesis_video_frame(Frame *frame, const nanoseconds &pts, const nanoseconds &dts, FRAME_FLAGS flags,
@@ -198,10 +197,6 @@ static GstFlowReturn on_new_sample(GstElement *sink, CustomData *data) {
 			bool delta = GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_DELTA_UNIT);
 			FRAME_FLAGS kinesis_video_flags;
 			if (!delta) {
-				// Safeguard stream and playback in case of h264 keyframes comes with different PTS and DTS
-				if (data->h264_stream_supported) {
-					buffer->pts = buffer->dts;
-				}
 				kinesis_video_flags = FRAME_FLAG_KEY_FRAME;
 			}
 			else {
@@ -221,29 +216,13 @@ static GstFlowReturn on_new_sample(GstElement *sink, CustomData *data) {
 	return GST_FLOW_OK;
 }
 
-static bool format_supported_by_source(GstCaps *src_caps, bool h264_stream, int width, int height, int framerate) {
-	GstCaps *query_caps;
-	query_caps = gst_caps_new_simple(h264_stream ? "video/x-h264" : "video/x-raw(memory:NVMM)",
-		"width", G_TYPE_INT, width,
-		"height", G_TYPE_INT, height,
-		"framerate", GST_TYPE_FRACTION_RANGE, framerate, 1, framerate + 1, 1,
-		NULL);
+static bool resolution_supported(GstCaps *src_caps, int width, int height, int framerate) {
+	//gchar *my_string = g_strdup_printf("video/x-raw(memory:NVMM), width=(int)%i, height=(int)%i, format=(string)%s, framerate=(fraction)%i / 1", width, height, framerate);
+	gchar *s = g_strdup_printf("%s, width=(int)%i, height=(int)%i, framerate=(fraction)%i / 1", FILTER, width, height, framerate);
+	GstCaps *query_caps; 
+	query_caps = gst_caps_from_string(s);
+	g_free(s);
 	return gst_caps_can_intersect(query_caps, src_caps);
-}
-
-static bool resolution_supported(GstCaps *src_caps, CustomData &data, int width, int height, int framerate) {
-	if (format_supported_by_source(src_caps, true, width, height, framerate)) {
-		g_print(">>>236367\n");
-		data.h264_stream_supported = true;
-	}
-	else if (format_supported_by_source(src_caps, false, width, height, framerate)) {
-		g_print(">>>8957432\n");
-		data.h264_stream_supported = false;
-	}
-	else {
-		return false;
-	}
-	return true;
 }
 
 /* This function is called when an error message is posted on the bus */
@@ -270,8 +249,7 @@ void kinesis_video_init(CustomData *data, char *stream_name) {
 	char const *secretKey;
 	char const *sessionToken;
 	char const *defaultRegion;
-	string defaultRegionStr;
-	string sessionTokenStr;
+
 	if (nullptr == (accessKey = getenv(ACCESS_KEY_ENV_VAR))) {
 		accessKey = "AccessKey";
 	}
@@ -343,76 +321,30 @@ void kinesis_video_init(CustomData *data, char *stream_name) {
 	LOG_DEBUG("Stream is ready");
 }
 
-int gstreamer_init(int argc, char* argv[]) {
-		g_print(">>>V:4111114!\n");
+#define FILTER "video/x-raw(memory:NVMM)";
+#define FORMAT "I420";
+//#define WIDTH 1920;
+//#define HEIGHT 1080;
+//#define FRAMERATE 24;
+//#define BITRATE 512;
+
+CustomData data = NULL;
+
+int gstreamer_init(int argc, char* argv[], int width = 1920, int height = 1080, int framerate = 24, int bitrateInKBPS = 512) {
+
 	BasicConfigurator config;
 	config.configure();
 
-	if (argc < 2) {
-		LOG_ERROR(
-			"Usage: AWS_ACCESS_KEY_ID=SAMPLEKEY AWS_SECRET_ACCESS_KEY=SAMPLESECRET ./kinesis_video_gstreamer_sample_app -w width -h height -f framerate -b bitrateInKBPS my-stream-name \n \
-           or AWS_ACCESS_KEY_ID=SAMPLEKEY AWS_SECRET_ACCESS_KEY=SAMPLESECRET ./kinesis_video_gstreamer_sample_app my-stream-name");
-		return 1;
-	}
-
-	CustomData data;
 	GstStateChangeReturn ret;
-	bool vtenc, isOnRpi;
 
-	/* init data struct */
 	memset(&data, 0, sizeof(data));
 
-	/* init GStreamer */
 	gst_init(&argc, &argv);
-
-	/* init stream format */
-	int opt, width = 0, height = 0, framerate = 30, bitrateInKBPS = 512;
-	char *endptr;
-	while ((opt = getopt(argc, argv, "w:h:f:b:")) != -1) {
-		switch (opt) {
-		case 'w':
-			width = strtol(optarg, &endptr, 0);
-			if (*endptr != '\0') {
-				g_printerr("Invalid width value.\n");
-				return 1;
-			}
-			break;
-		case 'h':
-			height = strtol(optarg, &endptr, 0);
-			if (*endptr != '\0') {
-				g_printerr("Invalid height value.\n");
-				return 1;
-			}
-			break;
-		case 'f':
-			framerate = strtol(optarg, &endptr, 0);
-			if (*endptr != '\0') {
-				g_printerr("Invalid framerate value.\n");
-				return 1;
-			}
-			break;
-		case 'b':
-			bitrateInKBPS = strtol(optarg, &endptr, 0);
-			if (*endptr != '\0') {
-				g_printerr("Invalid bitrate value.\n");
-				return 1;
-			}
-			break;
-		default: /* '?' */
-			g_printerr("Invalid arguments\n");
-			return 1;
-		}
-	}
-
+	
 	/* init Kinesis Video */
 	char stream_name[MAX_STREAM_NAME_LEN];
 	SNPRINTF(stream_name, MAX_STREAM_NAME_LEN, argv[optind]);
 	kinesis_video_init(&data, stream_name);
-
-	if ((width == 0 && height != 0) || (width != 0 && height == 0)) {
-		g_printerr("Invalid resolution\n");
-		return 1;
-	}
 
 	/* create the elemnents */
 	/*
@@ -422,77 +354,51 @@ int gstreamer_init(int argc, char* argv[]) {
 
 	*/
 	data.source_filter = gst_element_factory_make("capsfilter", "source_filter");
-	data.filter = gst_element_factory_make("capsfilter", "encoder_filter");
-	data.appsink = gst_element_factory_make("appsink", "appsink");
-	data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
-
-																		 // Attempt to create vtenc encoder
-	data.encoder = gst_element_factory_make("vtenc_h264_hw", "encoder");
-	if (data.encoder) {
-		g_print(">>>611111\n");
-		data.source = gst_element_factory_make("autovideosrc", "source");
-		vtenc = true;
-	}
-	else {
-		g_print(">>>3444445\n");
-		// Failed creating vtenc - check pi hardware encoder
-		data.encoder = gst_element_factory_make("omxh264enc", "encoder");
-		if (data.encoder) {
-			g_print(">>>77777555\n");
-			isOnRpi = true;
-		}
-		else {
-			g_print(">>>445566\n");
-			// - attempt x264enc
-			data.encoder = gst_element_factory_make("x264enc", "encoder");
-			isOnRpi = false;
-		}
-		//data.source = gst_element_factory_make("v4l2src", "source");
-		LOG_DEBUG(">>>gst_element_factory_make(nvcamerasrc...");
-		data.source = gst_element_factory_make("nvcamerasrc", "source");//nvcamerasrc
-		vtenc = false;
-	}
-
-	/* create an empty pipeline */
-	data.pipeline = gst_pipeline_new("test-pipeline");
-
-	if (!data.pipeline) {
-		g_printerr("data.pipeline could not be created.\n");
-		return 1;
-	}
-	if (!data.source) {
-		g_printerr("data.source could not be created.\n");
-		return 1;
-	}
 	if (!data.source_filter) {
 		g_printerr("data.source_filter could not be created.\n");
 		return 1;
 	}
-	if (!data.encoder) {
-		g_printerr("data.encoder could not be created.\n");
-		return 1;
-	}
+	data.filter = gst_element_factory_make("capsfilter", "encoder_filter");
 	if (!data.filter) {
 		g_printerr("data.filter could not be created.\n");
 		return 1;
 	}
+	data.appsink = gst_element_factory_make("appsink", "appsink");
 	if (!data.appsink) {
 		g_printerr("data.appsink could not be created.\n");
 		return 1;
 	}
+	data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
 	if (!data.h264parse) {
 		g_printerr("data.h264parse could not be created.\n");
 		return 1;
 	}
+																		
+	
+		g_print(">>>3444445\n");
+		data.encoder = gst_element_factory_make("omxh264enc", "encoder");
+		if (!data.encoder) {
+			g_printerr("data.encoder could not be created.\n");
+			return 1;
+		}
 
-	/* configure source */
-	if (!vtenc) {
+		data.source = gst_element_factory_make("nvcamerasrc", "source");//nvcamerasrc
+	if (!data.source) {
+		g_printerr("data.source could not be created.\n");
+		return 1;
+	}
+
+	data.pipeline = gst_pipeline_new("nvcamerasrc-pipeline");
+	if (!data.pipeline) {
+		g_printerr("data.pipeline could not be created.\n");
+		return 1;
+	}
+
 		g_print(">>>068476\n");
 				  g_object_set(G_OBJECT (data.source), "do-timestamp", TRUE/*, "device", "/dev/video0"*/, NULL);
-	}
+	
 	g_print(">>>11111\n");
 
-	/* Determine whether device supports h264 encoding and select a streaming resolution supported by the device*/
 	if (GST_STATE_CHANGE_FAILURE == gst_element_set_state(data.source, GST_STATE_READY)) {
 		g_printerr("Unable to set the source to ready state.\n");
 		return 1;
@@ -518,36 +424,20 @@ int gstreamer_init(int argc, char* argv[]) {
 
 	g_print(">>>55555555\n");
 	/* source filter */
-	GstCaps *source_caps; // nv omxh264enc only support I420 or NV12 as input formats see doc	
-	source_caps = gst_caps_from_string("video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)I420");
-
-		//source_caps = gst_caps_new_simple("video/x-raw(memory:NVMM)",//nvcamerasrc
-		//	"format", G_TYPE_STRING, "I420",
-		//	"width", G_TYPE_INT, width,
-		//	"height", G_TYPE_INT, height,
-		//	"framerate", GST_TYPE_FRACTION_RANGE, framerate, 1, framerate + 1, 1,
-		//	NULL);
-
+	GstCaps *source_caps; 
+	// nv omxh264enc only support I420 or NV12 as input formats see doc	
+	//source_caps = gst_caps_from_string("video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)I420");
+	gchar *s = g_strdup_printf("%s, width=(int)%i, height=(int)%i, format=(string)%s, framerate=(fraction)%i/1", FILTER, width, height, FORMAT, framerate);
+	LOG_INFO(">>Filter: " << s);// LOG4CPLUS_TEXT("This is a char: ")		<< LOG4CPLUS_TEXT('x')
+	source_caps = gst_caps_from_string(s);
+	g_free(s);
 	g_print(">>>6666666666\n");
 
 	g_object_set(G_OBJECT(data.source_filter), "caps", source_caps, NULL);
 	gst_caps_unref(source_caps);
 
-	/* configure encoder */
-		if (vtenc) {
-			g_print(">>>888885464\n");
-			g_object_set(G_OBJECT(data.encoder), "allow-frame-reordering", FALSE, "realtime", TRUE, "max-keyframe-interval", 45, "bitrate", bitrateInKBPS, NULL);
-		}
-		else if (isOnRpi) {
 			g_print(">>>23232322323232\n");
-			g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "target-bitrate", bitrateInKBPS * 10000,
-				"periodicity-idr", 45, "inline-header", FALSE, NULL);
-		}
-		else {
-			g_print(">>>9999999grg\n");
-			g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", 45, "bitrate", bitrateInKBPS, NULL);
-		}
-
+			g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "target-bitrate", bitrateInKBPS * 10000, "periodicity-idr", 45, "inline-header", FALSE, NULL);
 
 	/* configure filter */
 	GstCaps *h264_caps = gst_caps_new_simple("video/x-h264",
@@ -569,8 +459,6 @@ int gstreamer_init(int argc, char* argv[]) {
 	g_object_set(G_OBJECT(data.appsink), "emit-signals", TRUE, "sync", FALSE, NULL);
 	g_signal_connect(data.appsink, "new-sample", G_CALLBACK(on_new_sample), &data);
 
-	/* build the pipeline */
-	if (!data.h264_stream_supported) {
 		g_print(">>>3447686779898\n");
 		gst_bin_add_many(GST_BIN(data.pipeline), data.source, data.video_convert, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL);
 		if (gst_element_link_many(data.source, data.video_convert, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL) != TRUE) {
@@ -578,16 +466,6 @@ int gstreamer_init(int argc, char* argv[]) {
 			gst_object_unref(data.pipeline);
 			return 1;
 		}
-	}
-	else {
-		g_print(">>>00008789\n");
-		gst_bin_add_many(GST_BIN(data.pipeline), data.source, data.h264parse, data.filter, data.appsink, NULL);
-		if (gst_element_link_many(data.source, data.h264parse, data.filter, data.appsink, NULL) != TRUE) {
-			g_printerr("Elements could not be linked.\n");
-			gst_object_unref(data.pipeline);
-			return 1;
-		}
-	}
 
 	g_print(">>>9999999999999922\n");
 
@@ -609,12 +487,37 @@ int gstreamer_init(int argc, char* argv[]) {
 	data.main_loop = g_main_loop_new(NULL, FALSE);
 	g_main_loop_run(data.main_loop);
 
-	/* free resources */
-	gst_element_set_state(data.pipeline, GST_STATE_NULL);
-	gst_object_unref(data.pipeline);
+	free_resources();
 	return 0;
 }
 
+void free_resources(void)
+{
+	g_print("Shutting down...\n");
+	if (data != NULL && data.pipeline != NULL) {
+		gst_element_set_state(data.pipeline, GST_STATE_NULL);
+		gst_object_unref(data.pipeline);
+		data = NULL;
+	}
+}
+
+/*TBD:
+- how to suppress DEBUG output of kinesis?
+*/
+
 int main(int argc, char* argv[]) {
+	g_print(">>>V:180615-1!\n");
+	LOG_CONFIGURE_STDOUT(20000);
+
+	if (argc < 2) {
+		LOG_ERROR("Usage: AWS_ACCESS_KEY_ID=SAMPLEKEY AWS_SECRET_ACCESS_KEY=SAMPLESECRET ./kinesis_video_gstreamer_sample_app my-stream-name");
+		return 1;
+	}
+
+	if (atexit(free_resources)) {
+		LOG_ERROR(stderr, "Could not atexit\n");
+		return 1;
+	}
+
 	return gstreamer_init(argc, argv);
 }
