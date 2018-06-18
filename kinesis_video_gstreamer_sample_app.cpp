@@ -6,6 +6,7 @@
 #include "KinesisVideoProducer.h"
 #include <vector>
 #include <stdlib.h>
+#include <signal.h>
 
 using namespace std;
 using namespace com::amazonaws::kinesis::video;
@@ -315,12 +316,17 @@ void kinesis_video_init(CustomData *data, char *stream_name) {
 CustomData* pData = NULL;
 void free_resources(void)
 {
-	g_print("Shutting down...\n");
 	if (pData != NULL && pData->pipeline != NULL) {
+		g_print("Shutting down...\n");
 		gst_element_set_state(pData->pipeline, GST_STATE_NULL);
 		gst_object_unref(pData->pipeline);
 		pData = NULL;
 	}
+}
+void signal_handler(int sigNumber)
+{
+	free_resources();
+	exit(0);
 }
 
 #define SOURCE_FILTER "video/x-raw(memory:NVMM)"
@@ -336,12 +342,10 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	BasicConfigurator config;
 	config.configure();
 
-	GstStateChangeReturn ret;
-
 	CustomData data;
 	memset(&data, 0, sizeof(data));
 	pData = &data;
-		
+
 	kinesis_video_init(&data, stream_name);
 
 	/* create the elemnents */
@@ -357,11 +361,11 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 		g_printerr("data.source_filter could not be created.\n");
 		return 1;
 	}
-		data.encoder = gst_element_factory_make("omxh264enc", "encoder");
-		if (!data.encoder) {
-			g_printerr("data.encoder could not be created.\n");
-			return 1;
-		}
+	data.encoder = gst_element_factory_make("omxh264enc", "encoder");
+	if (!data.encoder) {
+		g_printerr("data.encoder could not be created.\n");
+		return 1;
+	}
 	data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
 	if (!data.h264parse) {
 		g_printerr("data.h264parse could not be created.\n");
@@ -377,11 +381,8 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 		g_printerr("data.appsink could not be created.\n");
 		return 1;
 	}
-																		
 	
-		g_print(">>>3444445\n");
-
-		data.source = gst_element_factory_make("nvcamerasrc", "source");//nvcamerasrc
+	data.source = gst_element_factory_make("nvcamerasrc", "source");//nvcamerasrc
 	if (!data.source) {
 		g_printerr("data.source could not be created.\n");
 		return 1;
@@ -393,11 +394,8 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 		return 1;
 	}
 
-		g_print(">>>068476\n");
-				  g_object_set(G_OBJECT (data.source), "do-timestamp", TRUE/*, "device", "/dev/video0"*/, NULL);
+	g_object_set(G_OBJECT(data.source), "do-timestamp", TRUE/*, "device", "/dev/video0"*/, NULL);
 	
-	g_print(">>>11111\n");
-
 	if (GST_STATE_CHANGE_FAILURE == gst_element_set_state(data.source, GST_STATE_READY)) {
 		g_printerr("Unable to set the source to ready state.\n");
 		return 1;
@@ -406,36 +404,28 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	GstPad *srcpad = gst_element_get_static_pad(data.source, "src");
 	GstCaps *src_caps = gst_pad_query_caps(srcpad, NULL);
 	gst_element_set_state(data.source, GST_STATE_NULL);
-		
-	g_print(">>>4444444444\n");
 
 	gst_caps_unref(src_caps);
 	gst_object_unref(srcpad);
 
-		g_print(">>>45365756\n");
-		data.video_convert = gst_element_factory_make("videoconvert", "video_convert");
+	/*data.video_convert = gst_element_factory_make("videoconvert", "video_convert");
+	if (!data.video_convert) {
+		g_printerr("Not all elements could be created.\n");
+		return 1;
+	}*/
 
-		if (!data.video_convert) {
-			g_print(">>>567856785\n");
-			g_printerr("Not all elements could be created.\n");
-			return 1;
-		}
-
-	g_print(">>>55555555\n");
-	GstCaps *source_caps; 
+	GstCaps *source_caps;
 	// nv omxh264enc only support I420 or NV12 as input formats see doc	
 	gchar *s = g_strdup_printf("%s, width=(int)%i, height=(int)%i, format=(string)%s, framerate=(fraction)%i/1", SOURCE_FILTER, width, height, SOURCE_FORMAT, framerate);
 	LOG_INFO(">>Filter: " << s);
 	source_caps = gst_caps_from_string(s);
 	g_free(s);
-	g_print(">>>6666666666\n");
 
 	g_object_set(G_OBJECT(data.source_filter), "caps", source_caps, NULL);
 	gst_caps_unref(source_caps);
 
-			g_print(">>>23232322323232\n");
-			//g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "target-bitrate", bitrateInKBPS * 10000, "periodicity-idr", 45, "inline-header", FALSE, NULL);
-			g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", 10, "bitrate", bitrateInKBPS, NULL);
+	//g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "target-bitrate", bitrateInKBPS * 10000, "periodicity-idr", 45, "inline-header", FALSE, NULL);
+	g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", 45, "bitrate", bitrateInKBPS, NULL);
 
 	//GstCaps *h264_caps = gst_caps_new_simple("video/x-h264",
 	//	"stream-format", G_TYPE_STRING, "avc",
@@ -444,52 +434,81 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	//	"height", G_TYPE_INT, height,
 	//	"framerate", GST_TYPE_FRACTION_RANGE, framerate, 1, framerate + 1, 1,
 	//	NULL);
-	//	g_print(">>>56341222222\n");
 	//	gst_caps_set_simple(h264_caps, "profile", G_TYPE_STRING, "baseline", NULL);
 	//g_object_set(G_OBJECT(data.filter), "caps", h264_caps, NULL);
 	//gst_caps_unref(h264_caps);
-			GstCaps *h264_caps = gst_caps_new_simple("video/x-h264",
-				"stream-format", G_TYPE_STRING, "avc",
-				"alignment", G_TYPE_STRING, "au",
-				"width", G_TYPE_INT, width,
-				"height", G_TYPE_INT, height,
-				"framerate", GST_TYPE_FRACTION_RANGE, framerate, 1, framerate + 1, 1,
-				NULL);
-			g_print(">>>56341222222\n");
-			gst_caps_set_simple(h264_caps, "profile", G_TYPE_STRING, "baseline", NULL);
-			g_object_set(G_OBJECT(data.filter), "caps", h264_caps, NULL);
-			gst_caps_unref(h264_caps);
+	GstCaps *h264_caps = gst_caps_new_simple("video/x-h264",
+		"stream-format", G_TYPE_STRING, "avc",
+		"alignment", G_TYPE_STRING, "au",
+		"width", G_TYPE_INT, width,
+		"height", G_TYPE_INT, height,
+		"framerate", GST_TYPE_FRACTION_RANGE, framerate, 1, framerate + 1, 1,
+		NULL);
+	gst_caps_set_simple(h264_caps, "profile", G_TYPE_STRING, "baseline", NULL);
+	g_object_set(G_OBJECT(data.filter), "caps", h264_caps, NULL);
+	gst_caps_unref(h264_caps);
 
 	g_object_set(G_OBJECT(data.appsink), "emit-signals", TRUE, "sync", FALSE, NULL);
 	g_signal_connect(data.appsink, "new-sample", G_CALLBACK(on_new_sample), &data);
 
-		g_print(">>>3447686779898\n");
-		gst_bin_add_many(GST_BIN(data.pipeline), data.source, data.video_convert, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL);
-		if (gst_element_link_many(data.source, data.video_convert, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL) != TRUE) {
-			g_printerr("Elements could not be linked.\n");
-			gst_object_unref(data.pipeline);
-			return 1;
-		}
-
-	g_print(">>>9999999999999922\n");
+	gst_bin_add_many(GST_BIN(data.pipeline), data.source/*, data.video_convert*/, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL);
+	if (gst_element_link_many(data.source/*, data.video_convert*/, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL) != TRUE) {
+		g_printerr("Elements could not be linked.\n");
+		gst_object_unref(data.pipeline);
+		return 1;
+	}
 
 	/* Instruct the bus to emit signals for each received message, and connect to the interesting signals */
 	data.bus = gst_element_get_bus(data.pipeline);
 	gst_bus_add_signal_watch(data.bus);
 	g_signal_connect(G_OBJECT(data.bus), "message::error", (GCallback)error_cb, &data);
 	gst_object_unref(data.bus);
-
+	
 	/* start streaming */
-	ret = gst_element_set_state(data.pipeline, GST_STATE_PLAYING);
+	GstStateChangeReturn ret = gst_element_set_state(data.pipeline, GST_STATE_PLAYING);
 	if (ret == GST_STATE_CHANGE_FAILURE) {
 		g_printerr("Unable to set the pipeline to the playing state.\n");
 		gst_object_unref(data.pipeline);
 		return 1;
 	}
 
-	g_print(">>>000000000000000000000000000123\n");
 	data.main_loop = g_main_loop_new(NULL, FALSE);
 	g_main_loop_run(data.main_loop);
+
+	free_resources();
+	return 0;
+}
+
+int run_gst_pipeline(int argc, char* argv[]) {
+	gst_init(&argc, &argv);
+
+	char stream_name[MAX_STREAM_NAME_LEN];
+	SNPRINTF(stream_name, MAX_STREAM_NAME_LEN, argv[optind]);
+	if (0 != gstreamer_init(stream_name)) {
+		free_resources();
+		return 1;
+	}
+
+	///* Instruct the bus to emit signals for each received message, and connect to the interesting signals */
+	//pData->bus = gst_element_get_bus(pData->pipeline);
+	//gst_bus_add_signal_watch(pData->bus);
+	//g_signal_connect(G_OBJECT(pData->bus), "message::error", (GCallback)error_cb, pData);
+	//gst_object_unref(pData->bus);
+
+	//g_print(">>>>fdszfszd");
+
+	///* start streaming */
+	//GstStateChangeReturn ret = gst_element_set_state(pData->pipeline, GST_STATE_PLAYING);
+	//if (ret == GST_STATE_CHANGE_FAILURE) {
+	//	g_printerr("Unable to set the pipeline to the playing state.\n");
+	//	gst_object_unref(pData->pipeline);
+	//	return 1;
+	//}
+	//g_print(">>>>uytjygfj");
+
+	//pData->main_loop = g_main_loop_new(NULL, FALSE);
+	//g_print(">>>>kuhkhg");
+	//g_main_loop_run(pData->main_loop);
 
 	free_resources();
 	return 0;
@@ -500,8 +519,9 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 */
 
 int main(int argc, char* argv[]) {
-	g_print(">>>V:180615-2!\n");
-	//LOG_CONFIGURE_STDOUT(20000);
+	PropertyConfigurator::doConfigure("kvs_log_configuration");
+	g_print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+	g_print(">>>Version:180617-35!\n");
 
 	if (argc < 2) {
 		LOG_ERROR("Usage: AWS_ACCESS_KEY_ID=SAMPLEKEY AWS_SECRET_ACCESS_KEY=SAMPLESECRET ./kinesis_video_gstreamer_sample_app my-stream-name");
@@ -512,10 +532,10 @@ int main(int argc, char* argv[]) {
 		LOG_ERROR("Could not atexit\n");
 		return 1;
 	}
+	if (signal(SIGINT, signal_handler) == SIG_ERR) {
+		LOG_ERROR("Could not signal\n");
+		return 1;
+	}
 
-	gst_init(&argc, &argv);
-
-	char stream_name[MAX_STREAM_NAME_LEN];
-	SNPRINTF(stream_name, MAX_STREAM_NAME_LEN, argv[optind]);
-	return gstreamer_init(stream_name);
+	return run_gst_pipeline(argc, argv);
 }
