@@ -12,7 +12,8 @@ using namespace std;
 using namespace com::amazonaws::kinesis::video;
 using namespace log4cplus;
 
-LOGGER_TAG("com.amazonaws.kinesis.video.gstreamer");
+LOGGER_TAG("com.amazonaws.kinesis.video.gstreamer"); 
+//LOGGER_TAG("com.amazonaws.kinesis.video");
 
 #define ACCESS_KEY_ENV_VAR "AWS_ACCESS_KEY_ID"
 #define SECRET_KEY_ENV_VAR "AWS_SECRET_ACCESS_KEY"
@@ -329,15 +330,16 @@ void signal_handler(int sigNumber)
 	exit(0);
 }
 
+#define SOURCE "nvcamerasrc"
 #define SOURCE_FILTER "video/x-raw(memory:NVMM)"
 #define SOURCE_FORMAT "I420"
+#define ENCODER "omxh264enc"
 //#define WIDTH 1920
 //#define HEIGHT 1080
 //#define FRAMERATE 24
 //#define BITRATE 512
 
-
-int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int framerate = 24, int bitrateInKBPS = 512) {
+int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int framerate = 24, int bitrate = 1000000) {
 
 	BasicConfigurator config;
 	config.configure();
@@ -351,19 +353,20 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	/* create the elemnents */
 	/*
 	//gst-launch-1.0 v4l2src device=/dev/video0 ! video/x-raw,format=I420,width=1280,height=720,framerate=15/1 ! x264enc pass=quant bframes=0 ! video/x-h264,profile=baseline,format=I420,width=1280,height=720,framerate=15/1 ! matroskamux ! filesink location=test.mkv
-
+	
 	gst-launch-1.0 nvcamerasrc ! 'video/x-raw(memory:NVMM), width=(int)1280, height=(int)720, format=(string)I420' ! omxh264enc ! h264parse ! matroskamux ! filesink location=test9.mkv
 
 	gst-launch-1.0 nvcamerasrc ! 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)I420, framerate=(fraction)24/1' ! omxh264enc ! matroskamux ! filesink location=test10.mkv
+	gst-launch-1.0 nvcamerasrc ! 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)I420, framerate=(fraction)24/1' ! x264enc ! matroskamux ! filesink location=test10.mkv
 	*/
 
-	data.pipeline = gst_pipeline_new("nvcamerasrc-pipeline");
+	data.pipeline = gst_pipeline_new(SOURCE"-pipeline");
 	if (!data.pipeline) {
 		g_printerr("data.pipeline could not be created.\n");
 		return 1;
 	}
 
-	data.source = gst_element_factory_make("nvcamerasrc", "source");//nvcamerasrc
+	data.source = gst_element_factory_make(SOURCE, "source");
 	if (!data.source) {
 		g_printerr("data.source could not be created.\n");
 		return 1;
@@ -398,14 +401,16 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	g_object_set(G_OBJECT(data.source_filter), "caps", source_filter_caps, NULL);
 	gst_caps_unref(source_filter_caps);
 
-	data.encoder = gst_element_factory_make("omxh264enc", "encoder");
+	data.encoder = gst_element_factory_make(ENCODER, "encoder");
 	if (!data.encoder) {
 		g_printerr("data.encoder could not be created.\n");
 		return 1;
 	}
-	//g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "target-bitrate", bitrateInKBPS * 10000, "periodicity-idr", 45, "inline-header", FALSE, NULL);
-	//g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", 45, "bitrate", bitrateInKBPS, NULL);
-	g_object_set(G_OBJECT(data.encoder), "key-int-max", 15, "bitrate", bitrateInKBPS, NULL);
+	//g_object_set(G_OBJECT(data.encoder), "control-rate", 1/*, "target-bitrate", bitrateInKBPS * 10000*/, "periodicity-idr", idrFramePeriodicty, "inline-header", FALSE, NULL);
+	//omxh264enc.qp-range="-1,-1:0,6:-1,-1", omxh264enc.iframeinterval=6 allowed to reduce fragment duration from 1.2-1.5 sec to 0.2s as it seen in AWS console
+	//omxh264enc supplied by NVIDIA has different parameters against that which are expected by SDK!
+	g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "qp-range", "-1,-1:-1,-1:-1,-1", "iframeinterval", 6/*, "bitrate", bitrate*/, NULL);
+	//g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", idrFramePeriodicty, "bitrate", bitrateInKBPS, NULL);
 
 	//data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
 	//if (!data.h264parse) {
@@ -431,7 +436,7 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	
 	data.appsink = gst_element_factory_make("appsink", "appsink");
 	if (!data.appsink) {
-		g_printerr("data.appsink could not be created.\n");
+		LOG_ERROR("data.appsink could not be created.\n");
 		return 1;
 	}
 	g_object_set(G_OBJECT(data.appsink), "emit-signals", TRUE, "sync", FALSE, NULL);
@@ -439,7 +444,7 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 
 	gst_bin_add_many(GST_BIN(data.pipeline), data.source/*, data.video_convert*/, data.source_filter, data.encoder/*, data.h264parse, data.filter*/, data.appsink, NULL);
 	if (gst_element_link_many(data.source/*, data.video_convert*/, data.source_filter, data.encoder/*, data.h264parse, data.filter*/, data.appsink, NULL) != TRUE) {
-		g_printerr("Elements could not be linked.\n");
+		LOG_ERROR("Elements could not be linked.\n");
 		gst_object_unref(data.pipeline);
 		return 1;
 	}
@@ -505,9 +510,14 @@ int run_gst_pipeline(int argc, char* argv[]) {
 */
 
 int main(int argc, char* argv[]) {
+	g_print("####################################################################################################\n");
+	g_print("####################################################################################################\n");
+	g_print(">>>Version:180617-46!\n");
+
 	PropertyConfigurator::doConfigure("kvs_log_configuration");
-	g_print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
-	g_print(">>>Version:180617-42!\n");
+	//LOG_CONFIGURE_STDOUT("INFO");
+	//LOG_CONFIGURE_STDERR("INFO");   
+	//Logger::getRoot().setLogLevel(0);
 
 	if (argc < 2) {
 		LOG_ERROR("Usage: AWS_ACCESS_KEY_ID=SAMPLEKEY AWS_SECRET_ACCESS_KEY=SAMPLESECRET ./kinesis_video_gstreamer_sample_app my-stream-name");
