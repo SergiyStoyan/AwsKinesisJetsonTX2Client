@@ -356,37 +356,6 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 
 	gst-launch-1.0 nvcamerasrc ! 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)I420, framerate=(fraction)24/1' ! omxh264enc ! matroskamux ! filesink location=test10.mkv
 	*/
-	data.source_filter = gst_element_factory_make("capsfilter", "source_filter");
-	if (!data.source_filter) {
-		g_printerr("data.source_filter could not be created.\n");
-		return 1;
-	}
-	data.encoder = gst_element_factory_make("omxh264enc", "encoder");
-	if (!data.encoder) {
-		g_printerr("data.encoder could not be created.\n");
-		return 1;
-	}
-	//data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
-	//if (!data.h264parse) {
-	//	g_printerr("data.h264parse could not be created.\n");
-	//	return 1;
-	//}
-	//data.filter = gst_element_factory_make("capsfilter", "encoder_filter");
-	//if (!data.filter) {
-	//	g_printerr("data.filter could not be created.\n");
-	//	return 1;
-	//}
-	data.appsink = gst_element_factory_make("appsink", "appsink");
-	if (!data.appsink) {
-		g_printerr("data.appsink could not be created.\n");
-		return 1;
-	}
-	
-	data.source = gst_element_factory_make("nvcamerasrc", "source");//nvcamerasrc
-	if (!data.source) {
-		g_printerr("data.source could not be created.\n");
-		return 1;
-	}
 
 	data.pipeline = gst_pipeline_new("nvcamerasrc-pipeline");
 	if (!data.pipeline) {
@@ -394,39 +363,61 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 		return 1;
 	}
 
+	data.source = gst_element_factory_make("nvcamerasrc", "source");//nvcamerasrc
+	if (!data.source) {
+		g_printerr("data.source could not be created.\n");
+		return 1;
+	}
 	g_object_set(G_OBJECT(data.source), "do-timestamp", TRUE/*, "device", "/dev/video0"*/, NULL);
-	
 	if (GST_STATE_CHANGE_FAILURE == gst_element_set_state(data.source, GST_STATE_READY)) {
 		g_printerr("Unable to set the source to ready state.\n");
 		return 1;
 	}
-
 	GstPad *srcpad = gst_element_get_static_pad(data.source, "src");
 	GstCaps *src_caps = gst_pad_query_caps(srcpad, NULL);
 	gst_element_set_state(data.source, GST_STATE_NULL);
-
 	gst_caps_unref(src_caps);
 	gst_object_unref(srcpad);
 
 	/*data.video_convert = gst_element_factory_make("videoconvert", "video_convert");
 	if (!data.video_convert) {
-		g_printerr("data.video_convert could not be created.\n");
-		return 1;
+	g_printerr("data.video_convert could not be created.\n");
+	return 1;
 	}*/
 
-	GstCaps *source_caps;
+	data.source_filter = gst_element_factory_make("capsfilter", "source_filter");
+	if (!data.source_filter) {
+		g_printerr("data.source_filter could not be created.\n");
+		return 1;
+	}
 	// nv omxh264enc only support I420 or NV12 as input formats see doc	
 	gchar *s = g_strdup_printf("%s, width=(int)%i, height=(int)%i, format=(string)%s, framerate=(fraction)%i/1", SOURCE_FILTER, width, height, SOURCE_FORMAT, framerate);
-	LOG_INFO(">>Filter: " << s);
-	source_caps = gst_caps_from_string(s);
+	LOG_INFO(">>Source filter: " << s);	
+	GstCaps *source_filter_caps = gst_caps_from_string(s);
 	g_free(s);
+	g_object_set(G_OBJECT(data.source_filter), "caps", source_filter_caps, NULL);
+	gst_caps_unref(source_filter_caps);
 
-	g_object_set(G_OBJECT(data.source_filter), "caps", source_caps, NULL);
-	gst_caps_unref(source_caps);
-
+	data.encoder = gst_element_factory_make("omxh264enc", "encoder");
+	if (!data.encoder) {
+		g_printerr("data.encoder could not be created.\n");
+		return 1;
+	}
 	//g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "target-bitrate", bitrateInKBPS * 10000, "periodicity-idr", 45, "inline-header", FALSE, NULL);
-	g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", 45, "bitrate", bitrateInKBPS, NULL);
+	//g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", 45, "bitrate", bitrateInKBPS, NULL);
+	g_object_set(G_OBJECT(data.encoder), "key-int-max", 15, "bitrate", bitrateInKBPS, NULL);
 
+	//data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
+	//if (!data.h264parse) {
+	//	g_printerr("data.h264parse could not be created.\n");
+	//	return 1;
+	//}
+
+	//data.filter = gst_element_factory_make("capsfilter", "encoder_filter");
+	//if (!data.filter) {
+	//	g_printerr("data.filter could not be created.\n");
+	//	return 1;
+	//}
 	//GstCaps *h264_caps = gst_caps_new_simple("video/x-h264",
 	//	"stream-format", G_TYPE_STRING, "avc",
 	//	"alignment", G_TYPE_STRING, "au",
@@ -437,7 +428,12 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	//	gst_caps_set_simple(h264_caps, "profile", G_TYPE_STRING, "baseline", NULL);
 	//g_object_set(G_OBJECT(data.filter), "caps", h264_caps, NULL);
 	//gst_caps_unref(h264_caps);
-
+	
+	data.appsink = gst_element_factory_make("appsink", "appsink");
+	if (!data.appsink) {
+		g_printerr("data.appsink could not be created.\n");
+		return 1;
+	}
 	g_object_set(G_OBJECT(data.appsink), "emit-signals", TRUE, "sync", FALSE, NULL);
 	g_signal_connect(data.appsink, "new-sample", G_CALLBACK(on_new_sample), &data);
 
@@ -511,7 +507,7 @@ int run_gst_pipeline(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
 	PropertyConfigurator::doConfigure("kvs_log_configuration");
 	g_print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
-	g_print(">>>Version:180617-40!\n");
+	g_print(">>>Version:180617-42!\n");
 
 	if (argc < 2) {
 		LOG_ERROR("Usage: AWS_ACCESS_KEY_ID=SAMPLEKEY AWS_SECRET_ACCESS_KEY=SAMPLESECRET ./kinesis_video_gstreamer_sample_app my-stream-name");
