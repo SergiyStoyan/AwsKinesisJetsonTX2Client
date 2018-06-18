@@ -1,5 +1,9 @@
-Installation and running amazon-kinesis-video-streams-producer-sdk-cpp1.4.1 ISSUES:
+ISSUES WHILE DEPLOYING amazon-kinesis-video-streams-producer-sdk-cpp1.4.1 TO JETSON TX2 SYSTEM
 
+
+
+Installing issues:
+____________________________________________________________
 
 #1
 
@@ -44,16 +48,20 @@ sudo mkdir -p /etc/ssl
 sudo cp /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem
 
 
+
+Running application issues:
+____________________________________________________________
+
+
 #4
 
 error while loading shared libraries: liblog4cplus-1.2.so.5: cannot open shared object file: No such file or directory
  
 remedy:
 
->export LD_LIBRARY_PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.1/kinesis-video-native-build/downloads/local/lib:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.1/kinesis-video-native-build/downloads/local/lib:$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/gstreamer-1.0
+>export LD_LIBRARY_PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.1/kinesis-video-native-build/downloads/local/lib:$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/gstreamer-1.0
+//>export LD_LIBRARY_PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.1/kinesis-video-native-build/downloads/local/lib:$LD_LIBRARY_PATH
 //export LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/gstreamer-1.0
-
 
 
 
@@ -63,8 +71,8 @@ gst_element_factory_make ("nvcamerasrc", NULL); returns NULL
 
 remedy:
 
-//>export GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/gstreamer-1.0 
 >export GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/tegra/:/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.1/kinesis-video-native-build/downloads/local/lib/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$GST_PLUGIN_PATH
+//>export GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/gstreamer-1.0 
 //>export GST_PLUGIN_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/tegra/
 
 
