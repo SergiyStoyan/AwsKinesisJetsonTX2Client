@@ -366,16 +366,16 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 		g_printerr("data.encoder could not be created.\n");
 		return 1;
 	}
-	data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
-	if (!data.h264parse) {
-		g_printerr("data.h264parse could not be created.\n");
-		return 1;
-	}
-	data.filter = gst_element_factory_make("capsfilter", "encoder_filter");
-	if (!data.filter) {
-		g_printerr("data.filter could not be created.\n");
-		return 1;
-	}
+	//data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
+	//if (!data.h264parse) {
+	//	g_printerr("data.h264parse could not be created.\n");
+	//	return 1;
+	//}
+	//data.filter = gst_element_factory_make("capsfilter", "encoder_filter");
+	//if (!data.filter) {
+	//	g_printerr("data.filter could not be created.\n");
+	//	return 1;
+	//}
 	data.appsink = gst_element_factory_make("appsink", "appsink");
 	if (!data.appsink) {
 		g_printerr("data.appsink could not be created.\n");
@@ -410,7 +410,7 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 
 	/*data.video_convert = gst_element_factory_make("videoconvert", "video_convert");
 	if (!data.video_convert) {
-		g_printerr("Not all elements could be created.\n");
+		g_printerr("data.video_convert could not be created.\n");
 		return 1;
 	}*/
 
@@ -437,22 +437,12 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	//	gst_caps_set_simple(h264_caps, "profile", G_TYPE_STRING, "baseline", NULL);
 	//g_object_set(G_OBJECT(data.filter), "caps", h264_caps, NULL);
 	//gst_caps_unref(h264_caps);
-	GstCaps *h264_caps = gst_caps_new_simple("video/x-h264",
-		"stream-format", G_TYPE_STRING, "avc",
-		"alignment", G_TYPE_STRING, "au",
-		"width", G_TYPE_INT, width,
-		"height", G_TYPE_INT, height,
-		"framerate", GST_TYPE_FRACTION_RANGE, framerate, 1, framerate + 1, 1,
-		NULL);
-	gst_caps_set_simple(h264_caps, "profile", G_TYPE_STRING, "baseline", NULL);
-	g_object_set(G_OBJECT(data.filter), "caps", h264_caps, NULL);
-	gst_caps_unref(h264_caps);
 
 	g_object_set(G_OBJECT(data.appsink), "emit-signals", TRUE, "sync", FALSE, NULL);
 	g_signal_connect(data.appsink, "new-sample", G_CALLBACK(on_new_sample), &data);
 
-	gst_bin_add_many(GST_BIN(data.pipeline), data.source/*, data.video_convert*/, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL);
-	if (gst_element_link_many(data.source/*, data.video_convert*/, data.source_filter, data.encoder, data.h264parse, data.filter, data.appsink, NULL) != TRUE) {
+	gst_bin_add_many(GST_BIN(data.pipeline), data.source/*, data.video_convert*/, data.source_filter, data.encoder/*, data.h264parse, data.filter*/, data.appsink, NULL);
+	if (gst_element_link_many(data.source/*, data.video_convert*/, data.source_filter, data.encoder/*, data.h264parse, data.filter*/, data.appsink, NULL) != TRUE) {
 		g_printerr("Elements could not be linked.\n");
 		gst_object_unref(data.pipeline);
 		return 1;
@@ -521,7 +511,7 @@ int run_gst_pipeline(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
 	PropertyConfigurator::doConfigure("kvs_log_configuration");
 	g_print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
-	g_print(">>>Version:180617-35!\n");
+	g_print(">>>Version:180617-40!\n");
 
 	if (argc < 2) {
 		LOG_ERROR("Usage: AWS_ACCESS_KEY_ID=SAMPLEKEY AWS_SECRET_ACCESS_KEY=SAMPLESECRET ./kinesis_video_gstreamer_sample_app my-stream-name");
