@@ -291,7 +291,7 @@ void kinesis_video_init(CustomData *data, char *stream_name) {
 		STREAMING_TYPE_REALTIME,
 		"video/h264",
 		milliseconds::zero(),
-		seconds(2),
+		seconds(1),//fragment_duration 
 		milliseconds(1),
 		true,//Construct a fragment at each key frame
 		true,//Use provided frame timecode
@@ -409,7 +409,9 @@ int gstreamer_init(char* stream_name, int width = 1920, int height = 1080, int f
 	//g_object_set(G_OBJECT(data.encoder), "control-rate", 1/*, "target-bitrate", bitrateInKBPS * 10000*/, "periodicity-idr", idrFramePeriodicty, "inline-header", FALSE, NULL);
 	//omxh264enc.qp-range="-1,-1:0,6:-1,-1", omxh264enc.iframeinterval=6 allowed to reduce fragment duration from 1.2-1.5 sec to 0.2s as it seen in AWS console
 	//omxh264enc supplied by NVIDIA has different parameters against that which are expected by SDK!
-	g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "qp-range", "-1,-1:-1,-1:-1,-1", "iframeinterval", 6/*, "bitrate", bitrate*/, NULL);
+	//g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "qp-range", "-1,-1:-1,-1:-1,-1", "iframeinterval", 6/*, "bitrate", bitrate*/, NULL);
+	//AWS required to set fragment duration to 1 sec
+	g_object_set(G_OBJECT(data.encoder), "control-rate", 1, "qp-range", "-1,-1:-1,-1:-1,-1", "iframeinterval", 24/*, "bitrate", bitrate*/, NULL);
 	//g_object_set(G_OBJECT(data.encoder), "bframes", 0, "key-int-max", idrFramePeriodicty, "bitrate", bitrateInKBPS, NULL);
 
 	//data.h264parse = gst_element_factory_make("h264parse", "h264parse"); // needed to enforce avc stream format
