@@ -85,7 +85,7 @@ log4cplus.rootLogger=WARN, KvsConsoleAppender
 log4cplus.appender.KvsConsoleAppender=log4cplus::ConsoleAppender
 log4cplus.appender.KvsConsoleAppender.layout=log4cplus::PatternLayout
 log4cplus.appender.KvsConsoleAppender.layout.ConversionPattern=[%-5p][%d] %m%n
-#KvsFileAppender
+#KvsFileAppender:
 log4cplus.appender.KvsFileAppender=log4cplus::DailyRollingFileAppender
 log4cplus.appender.KvsFileAppender.File=./log/kvs.log
 log4cplus.appender.KvsFileAppender.Schedule=HOURLY
