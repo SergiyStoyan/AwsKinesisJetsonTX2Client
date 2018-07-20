@@ -1,5 +1,9 @@
 #!/bin/bash
 
+#USAGE:
+#with no argument: kill the running instance if any and start new;
+#argument 'stop': kill the running instance if any and exit;
+
 if [[ ":$PATH:" == *"/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/bin:"* ]]; 
 then
     echo "PATH is correct"
