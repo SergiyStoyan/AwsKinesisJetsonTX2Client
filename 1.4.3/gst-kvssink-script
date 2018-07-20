@@ -24,10 +24,19 @@ fi
 echo CLEARING
 ps aux | grep '[!] kvssink' | awk '{print $2}' | xargs sudo kill -9
 
+if [ "$1" == 'stop' ]; then
+    echo "STOPPED"
+    exit
+fi
+
 echo STARTING
-nohup gst-launch-1.0 nvcamerasrc ! 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)I420, framerate=(fraction)24/1' ! omxh264enc ! kvssink access-key= secret-key= stream-name=test11 storage-size=512 max-latency=30 fragment-duration=1000 key-frame-fragmentation=true fragment-acks=true framerate=24 log-config='./kvs_log_configuration'  &
+nohup gst-launch-1.0 nvcamerasrc ! 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)I420, framerate=(fraction)24/1' ! omxh264enc qp-range='1,-1:-1,-1:-1,-1', iframeinterval=24 ! kvssink access-key= secret-key= stream-name=test11 storage-size=512 max-latency=30 fragment-duration=10 key-frame-fragmentation=true fragment-acks=true framerate=24 log-config='./kvs_log_configuration'  &
 
-ps aux | grep '[!] kvssink'
-
-echo OK
+sleep 3
+RESULT=`ps aux | grep '[!] kvssink'`
+if [ "${RESULT:-null}" = null ]; then
+    echo "ERROR!"
+else
+    echo "OK"
+fi
 
