@@ -73,7 +73,7 @@ Ctrl+z
 >bg
 
 --------------------------------------------------------------------------------------
-All the commands above are packaged in gst-kvssink-script.
+All the commands above are packaged in gst-kvssink-script which is handier to use.
 
 --------------------------------------------------------------------------------------
 
