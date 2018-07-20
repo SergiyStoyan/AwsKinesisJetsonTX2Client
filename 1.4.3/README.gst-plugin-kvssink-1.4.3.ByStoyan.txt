@@ -60,11 +60,10 @@ How to run gst pipline with kvssink:
 Set path to gst-launch-1.0:
 >export PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/bin:$PATH
 
->export GST_PLUGIN_PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/lib:$GST_PLUGIN_PATH
+>export LD_LIBRARY_PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/lib:/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$LD_LIBRARY_PATH
 
->export LD_LIBRARY_PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/lib:$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/gstreamer-1.0
+>export GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/tegra/:/usr/lib/aarch64-linux-gnu/tegra/:/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/lib/:/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/lib/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$GST_PLUGIN_PATH
 
->export GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/tegra/:/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/lib/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$GST_PLUGIN_PATH
 
 Set access-key and secret-key in the command (for more parameters google 'kvssink') and run it:
 >gst-launch-1.0 nvcamerasrc ! 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)I420, framerate=(fraction)24/1' ! omxh264enc ! kvssink access-key= secret-key= stream-name=test11 storage-size=512 

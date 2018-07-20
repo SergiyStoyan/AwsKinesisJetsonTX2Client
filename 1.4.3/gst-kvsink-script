@@ -1,0 +1,24 @@
+#!/bin/bash
+
+if [[ ":$PATH:" == *"/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/bin:"* ]]; 
+then
+    echo "PATH is correct"
+else
+    export PATH=/home/ubuntu/amazon-kinesis-video-streams-producer-sdk-cpp-1.4.3/kinesis-video-native-build/downloads/local/bin:$PATH
+fi
+
+then
+    echo "LD_LIBRARY_PATH is correct"
+else
+fi
+
+then
+    echo "GST_PLUGIN_PATH is correct"
+else
+fi
+
+
+echo "**********************************************************"
+echo OK
+echo "**********************************************************"
+
